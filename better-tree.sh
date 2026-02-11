@@ -154,54 +154,61 @@ usage() {
 ${C_HEADER}Enhanced Tree — Ultimate Developer Tool${C_RESET}
 
 ${C_FLAG}USAGE${C_RESET}
-  ./tree.sh [OPTIONS] [DIRECTORY]
+  ./better-tree.sh [OPTIONS] [DIRECTORY]
 
 ${C_FLAG}NAVIGATION${C_RESET}
-  ${C_FLAG}-L${C_RESET} ${C_ARG}<depth>${C_RESET}        Limit depth
+  ${C_FLAG}-L${C_RESET} ${C_ARG}<depth>${C_RESET}        Limit recursion depth
   ${C_FLAG}-d${C_RESET}                Directories only
   ${C_FLAG}-a${C_RESET}                Show hidden files
-  ${C_FLAG}-e${C_RESET} ${C_ARG}<name>${C_RESET}         Exclude pattern (repeatable)
+  ${C_FLAG}-e${C_RESET}, ${C_FLAG}--exclude${C_RESET} ${C_ARG}<pattern>${C_RESET}
+                      Exclude pattern (repeatable)
 
 ${C_FLAG}DISPLAY${C_RESET}
-  ${C_FLAG}-i${C_RESET}                Detailed metadata (ls-like)
-  ${C_FLAG}-s${C_RESET}                Disable size display
-  ${C_FLAG}--theme${C_RESET} ${C_ARG}<name>${C_RESET}    Color theme (default|nord|gruvbox|dracula)
+  ${C_FLAG}-i${C_RESET}                Show detailed metadata (ls-like)
+  ${C_FLAG}-s${C_RESET}                Hide file sizes
+  ${C_FLAG}--theme${C_RESET} ${C_ARG}<name>${C_RESET}    Theme: default | nord | gruvbox | dracula
+  ${C_FLAG}--tests${C_RESET}            Highlight test files
 
 ${C_FLAG}INSPECT FILES${C_RESET}
-  ${C_FLAG}-c${C_RESET} ${C_ARG}<ext...>${C_RESET}       Print contents of matching extensions
-                     ${C_EX}Example: -c go tsx ts py${C_RESET}
-  ${C_FLAG}-g${C_RESET} ${C_ARG}<pattern>${C_RESET}      Grep mode - search inside files
-  ${C_FLAG}--tests${C_RESET}            Highlight test files
+  ${C_FLAG}-c${C_RESET}, ${C_FLAG}--cat${C_RESET} ${C_ARG}<ext...>${C_RESET}
+                      Print file contents for extensions
+                      Example: -c go tsx py
+  ${C_FLAG}-g${C_RESET}, ${C_FLAG}--grep${C_RESET} ${C_ARG}<pattern>${C_RESET}
+                      Search inside files (shows first 5 matches)
+  ${C_FLAG}--clip${C_RESET} ${C_ARG}<n>${C_RESET}        Limit printed lines per file (default: 100)
+  ${C_FLAG}--no-clip${C_RESET}, ${C_FLAG}--nc${C_RESET}
+                      Disable line clipping
 
 ${C_FLAG}GIT & FILTERING${C_RESET}
   ${C_FLAG}--git${C_RESET}              Respect .gitignore
-  ${C_FLAG}--focus${C_RESET} ${C_ARG}<ext...>${C_RESET}  Show only dirs containing these extensions
+  ${C_FLAG}--focus${C_RESET} ${C_ARG}<ext...>${C_RESET}
+                      Show only directories containing these extensions
 
 ${C_FLAG}ANALYSIS${C_RESET}
-  ${C_FLAG}--stats${C_RESET}            Language statistics
-  ${C_FLAG}--big${C_RESET}              Highlight large files (>5MB)
+  ${C_FLAG}--stats${C_RESET}            Show language statistics
+  ${C_FLAG}--big${C_RESET}              Highlight files >5MB
   ${C_FLAG}--dupes${C_RESET}            Find duplicate files
-  ${C_FLAG}--audit${C_RESET}            Security audit (executables, permissions)
-  ${C_FLAG}--fingerprint${C_RESET}      Project profile summary
+  ${C_FLAG}--audit${C_RESET}            Security audit (permissions, secrets)
+  ${C_FLAG}--fingerprint${C_RESET}      Project summary overview
 
 ${C_FLAG}ORGANIZATION${C_RESET}
-  ${C_FLAG}--sort${C_RESET} ${C_ARG}<mode>${C_RESET}     Sort by: name|size|time
+  ${C_FLAG}--sort${C_RESET} ${C_ARG}<mode>${C_RESET}     Sort by: name | size | time
   ${C_FLAG}--group${C_RESET}            Group files by extension
-  ${C_FLAG}--resolve${C_RESET}          Resolve symlinks to real paths
+  ${C_FLAG}--resolve${C_RESET}          Resolve symlinks
 
 ${C_FLAG}OUTPUT FORMATS${C_RESET}
   ${C_FLAG}--md${C_RESET}               Markdown export
   ${C_FLAG}--json${C_RESET}             JSON output
-  ${C_FLAG}--prompt${C_RESET}           AI-friendly mode (no colors, with code)
+  ${C_FLAG}--prompt${C_RESET}           AI-friendly dump (no colors, includes code)
 
 ${C_FLAG}EXAMPLES${C_RESET}
-  ./tree.sh                                    ${C_EX}# Basic tree${C_RESET}
-  ./tree.sh -L 2 --git                         ${C_EX}# Respect .gitignore, depth 2${C_RESET}
-  ./tree.sh -g "TODO" -c go                    ${C_EX}# Find TODOs in Go files${C_RESET}
-  ./tree.sh --stats --big                      ${C_EX}# Project overview${C_RESET}
-  ./tree.sh --prompt -c go tsx > prompt.txt    ${C_EX}# Generate AI prompt${C_RESET}
-  ./tree.sh --fingerprint                      ${C_EX}# Project summary${C_RESET}
-  ./tree.sh --focus go tsx --theme nord        ${C_EX}# Focus on Go/TSX, Nord theme${C_RESET}
+  ./better-tree.sh
+  ./better-tree.sh -L 2 --git
+  ./better-tree.sh -g "TODO" -c go
+  ./better-tree.sh --stats --big
+  ./better-tree.sh --prompt -c go tsx > prompt.txt
+  ./better-tree.sh --focus go tsx --theme nord
+
 EOF
     exit 0
 }
@@ -560,9 +567,9 @@ print_single_item() {
                 done <"$item"
             else
                 while IFS= read -r line; do
-    ce "$C_CONTENT" "${next_prefix}    │ $line"
-done < <(head -n "$CLIP" "$item")
-           fi
+                    ce "$C_CONTENT" "${next_prefix}    │ $line"
+                done < <(head -n "$CLIP" "$item")
+            fi
             ce "$C_CONTENT" "${next_prefix}    ╰────────────────────────"
         fi
 
