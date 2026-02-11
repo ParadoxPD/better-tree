@@ -3,8 +3,8 @@
 [![Bash](https://img.shields.io/badge/Bash-5.0%2B-121011?logo=gnu-bash)](https://www.gnu.org/software/bash/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-blue)]()
-[![GitHub stars](https://img.shields.io/github/stars/YOUR_USERNAME/YOUR_REPO?style=social)]()
-[![GitHub forks](https://img.shields.io/github/forks/YOUR_USERNAME/YOUR_REPO?style=social)]()
+[![GitHub stars](https://img.shields.io/github/stars/ParadoxPD/better-tree?style=social)]()
+[![GitHub forks](https://img.shields.io/github/forks/ParadoxPD/better-tree?style=social)]()
 
 > The ultimate directory visualization and code inspection tool for developers.
 
@@ -201,7 +201,7 @@ Paste into ChatGPT/Claude for instant code review.
 ## AI Code Review
 
 ```bash
-./better-tree.sh --prompt -c go tsx ts py | pbcopy
+./better-tree.sh --prompt -c go tsx ts py | xclip -sel clipboard
 ```
 
 Paste into your AI tool and ask:
@@ -238,6 +238,7 @@ Max Depth: 5
   - `git` (for `--git`)
   - `md5sum` or `md5`
   - `jq` (for JSON piping)
+  - `xclip`
 
 ---
 
