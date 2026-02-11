@@ -110,7 +110,9 @@ if [[ ! -t 1 ]]; then
     C_TEST=""
 fi
 
-ce() { echo -e "$1$2${C_RESET}"; }
+ce() {
+    printf "%s%s%s\n" "$1" "$2" "$C_RESET"
+}
 
 # ---------- Defaults ----------
 MAX_DEPTH=-1
@@ -137,6 +139,8 @@ FOCUS_EXTS=()
 SHOW_TESTS=false
 FINGERPRINT_MODE=false
 RESOLVE_SYMLINKS=false
+NO_CLIP=false
+CLIP=100
 
 DIR_COUNT=0
 FILE_COUNT=0
@@ -285,7 +289,8 @@ has_focus_extension() {
 
     local found=false
     while IFS= read -r -d '' file; do
-        local name=$(basename "$file")
+        local name
+        name=$(basename "$file")
         for ext in "${FOCUS_EXTS[@]}"; do
             if [[ "$name" == *."$ext" ]]; then
                 found=true
@@ -332,8 +337,10 @@ print_json_tree() {
 
     [[ $MAX_DEPTH -ge 0 && $depth -gt $MAX_DEPTH ]] && return
 
-    local name=$(basename "$dir")
-    local size=$(get_file_size "$dir")
+    local name
+    local size
+    name=$(basename "$dir")
+    size=$(get_file_size "$dir")
     local type="directory"
 
     echo -n "{"
@@ -354,7 +361,8 @@ print_json_tree() {
     local first=true
 
     for item in "${items[@]}"; do
-        local item_name=$(basename "$item")
+        local item_name
+        item_name=$(basename "$item")
         is_excluded "$item_name" && continue
         is_git_ignored "$item" && continue
 
@@ -367,7 +375,8 @@ print_json_tree() {
         elif [[ -f "$item" ]]; then
             $first || echo -n ","
             first=false
-            local fsize=$(get_file_size "$item")
+            local fsize
+            fsize=$(get_file_size "$item")
             echo -n "{"
             echo -n "\"name\":\"$(json_escape "$item_name")\","
             echo -n "\"type\":\"file\","
@@ -394,7 +403,8 @@ print_md_tree() {
     unset IFS
 
     for item in "${items[@]}"; do
-        local name=$(basename "$item")
+        local name
+        name=$(basename "$item")
         is_excluded "$name" && continue
         is_git_ignored "$item" && continue
 
@@ -509,18 +519,29 @@ print_single_item() {
     echo -ne "${prefix}${C_META}${branch}${C_RESET}${info}"
 
     if [[ -L "$item" ]]; then
-        ce "$C_LINK" "$name -> $(readlink "$item")"
-
-    elif [[ -d "$item" ]]; then
-        ce "$C_DIR" "$name/"
-
-    elif [[ -f "$item" ]]; then
-        if [[ -x "$item" ]]; then
-            ce "$C_EXEC" "$name*"
+        if $RESOLVE_SYMLINKS; then
+            ce "$C_LINK" "$name -> $(realpath "$item")"
         else
-            ce "$C_FILE" "$name"
+            ce "$C_LINK" "$name -> $(readlink "$item")"
         fi
 
+    elif [[ -d "$item" ]]; then
+        if $SHOW_TESTS && [[ "$name" == *test* || "$name" == *Test* ]]; then
+            ce "$C_TEST" "$name/"
+        else
+            ce "$C_DIR" "$name/"
+        fi
+
+    elif [[ -f "$item" ]]; then
+        if $SHOW_TESTS && is_test_file "$name"; then
+            ce "$C_TEST" "$name"
+        else
+            if [[ -x "$item" ]]; then
+                ce "$C_EXEC" "$name*"
+            else
+                ce "$C_FILE" "$name"
+            fi
+        fi
         # ---- grep ----
         if [[ -n "$GREP_PATTERN" ]] && grep -q "$GREP_PATTERN" "$item" 2>/dev/null; then
             ce "$C_CONTENT" "${next_prefix}    ╭── matches ──"
@@ -533,11 +554,22 @@ print_single_item() {
         # ---- cat ----
         if should_cat "$name"; then
             ce "$C_CONTENT" "${next_prefix}    ╭── content of $name ──"
-            head -100 "$item" | while read -r line; do
-                ce "$C_CONTENT" "${next_prefix}    │ $line"
-            done
+            if $NO_CLIP; then
+                while IFS= read -r line; do
+                    ce "$C_CONTENT" "${next_prefix}    │ $line"
+                done <"$item"
+            else
+                while IFS= read -r line; do
+    ce "$C_CONTENT" "${next_prefix}    │ $line"
+done < <(head -n "$CLIP" "$item")
+           fi
             ce "$C_CONTENT" "${next_prefix}    ╰────────────────────────"
         fi
+
+        if $AUDIT_MODE; then
+            audit_file "$item"
+        fi
+
     fi
 }
 
@@ -570,7 +602,8 @@ print_fingerprint() {
     # Calculate total size
     local total_size=0
     while IFS= read -r -d '' file; do
-        local fsize=$(get_file_size "$file")
+        local fsize
+        fsize=$(get_file_size "$file")
         ((total_size += fsize))
     done < <(find "$TARGET_DIR" -type f -print0 2>/dev/null)
     ce "$C_META" "Total Size: ${C_FILE}$(format_size $total_size)${C_RESET}"
@@ -578,7 +611,8 @@ print_fingerprint() {
     # Max depth
     local max_depth_found=0
     while IFS= read -r dir; do
-        local depth=$(echo "$dir" | tr -cd '/' | wc -c)
+        local depth
+        depth=$(echo "$dir" | tr -cd '/' | wc -c)
         ((depth > max_depth_found)) && max_depth_found=$depth
     done < <(find "$TARGET_DIR" -type d 2>/dev/null)
     ce "$C_META" "Max Depth: ${C_FILE}$max_depth_found${C_RESET}"
@@ -590,10 +624,12 @@ print_fingerprint() {
     if git rev-parse --git-dir &>/dev/null; then
         echo
         ce "$C_HEADER" "=== Git Status ==="
-        local branch=$(git branch --show-current 2>/dev/null)
+        local branch
+        branch=$(git branch --show-current 2>/dev/null)
         ce "$C_META" "Branch: ${C_FILE}$branch${C_RESET}"
 
-        local commits=$(git rev-list --count HEAD 2>/dev/null)
+        local commits
+        commits=$(git rev-list --count HEAD 2>/dev/null)
         ce "$C_META" "Commits: ${C_FILE}$commits${C_RESET}"
     fi
 
@@ -601,10 +637,12 @@ print_fingerprint() {
     echo
     ce "$C_HEADER" "=== Largest Files (Top 10) ==="
     find "$TARGET_DIR" -type f -print0 2>/dev/null | while IFS= read -r -d '' file; do
-        local size=$(get_file_size "$file")
+        local size
+        size=$(get_file_size "$file")
         echo "$size $file"
     done | sort -rn | head -10 | while read size file; do
-        local rel_path=${file#$TARGET_DIR/}
+        local rel_path
+        rel_path=${file#$TARGET_DIR/}
         ce "$C_SIZE" "  $(format_size $size) ${C_FILE}$rel_path${C_RESET}"
     done
 }
@@ -614,8 +652,10 @@ print_grouped_view() {
     declare -A grouped
 
     while IFS= read -r -d '' file; do
-        local name=$(basename "$file")
-        local ext=$(get_extension "$name")
+        local name
+        local ext
+        name=$(basename "$file")
+        ext=$(get_extension "$name")
         grouped[$ext]+="$file"$'\n'
     done < <(find "$dir" -type f -print0 2>/dev/null)
 
@@ -630,6 +670,62 @@ print_grouped_view() {
         done <<<"${grouped[$ext]}"
         echo
     done
+}
+
+audit_file() {
+    local file=$1
+    local perm
+    perm=$(stat -c "%A" "$file" 2>/dev/null || stat -f "%Sp" "$file")
+
+    # World writable
+    if [[ "$perm" == *w*w* ]]; then
+        ce "$C_WARN" "  ⚠ World-writable: $file"
+    fi
+
+    # Executable in weird places
+    if [[ -x "$file" && "$file" != *.sh && "$file" != *.go && "$file" != *.ts ]]; then
+        ce "$C_WARN" "  ⚠ Suspicious executable: $file"
+    fi
+
+    # Secrets
+    if grep -qiE "password|secret|token|apikey" "$file" 2>/dev/null; then
+        ce "$C_WARN" "  ⚠ Possible secret in: $file"
+    fi
+}
+
+generate_prompt_dump() {
+    local dir=$1
+
+    {
+        echo "# Project Structure"
+        echo '```'
+        print_tree "$dir" "" 0
+        echo '```'
+        echo
+
+        echo "# Source Files"
+        echo
+
+        while IFS= read -r -d '' file; do
+            ext="${file##*.}"
+            case "$ext" in
+            go | ts | tsx | js | jsx | py | json | md | yaml | yml | sh | java | dart | kt | kts)
+                echo "## File: ${file#$dir/}"
+                echo '```'"$ext"
+                sed 's/\t/    /g' "$file"
+                echo '```'
+                echo
+                ;;
+            esac
+        done < <(find "$dir" -type f -print0)
+    } | tee /tmp/tree_prompt.txt
+
+    # Copy to clipboard
+    if command -v xclip &>/dev/null; then
+        xclip -sel clipboard </tmp/tree_prompt.txt
+        echo
+        ce "$C_HEADER" "Prompt copied to clipboard ✓"
+    fi
 }
 
 # ---------- Args ----------
@@ -684,6 +780,14 @@ while [[ $# -gt 0 ]]; do
         ;;
     --json)
         OUTPUT_JSON=true
+        shift
+        ;;
+    --clip)
+        CLIP="$2"
+        shift 2
+        ;;
+    --nc | --no-clip)
+        NO_CLIP=true
         shift
         ;;
     --prompt)
@@ -775,7 +879,10 @@ done
 }
 
 # ---------- Run ----------
-if $OUTPUT_JSON; then
+if $PROMPT_MODE; then
+    generate_prompt_dump "$TARGET_DIR"
+    exit 0
+elif $OUTPUT_JSON; then
     echo "{"
     echo "\"root\":"
     print_json_tree "$TARGET_DIR" 0 true
