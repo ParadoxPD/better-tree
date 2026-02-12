@@ -23,6 +23,7 @@ C_EX=\$'\\e[0;90m'
 C_MATCH=\$'\\e[1;33m'
 C_WARN=\$'\\e[1;31m'
 C_TEST=\$'\\e[1;92m'
+C_COUNT=\$'\\e[0;36m'
 "
 
 THEMES[nord]="
@@ -41,6 +42,7 @@ C_EX=\$'\\e[38;5;242m'
 C_MATCH=\$'\\e[1;38;5;222m'
 C_WARN=\$'\\e[1;38;5;204m'
 C_TEST=\$'\\e[1;38;5;158m'
+C_COUNT=\$'\\e[38;5;73m'
 "
 
 THEMES[gruvbox]="
@@ -59,6 +61,7 @@ C_EX=\$'\\e[38;5;243m'
 C_MATCH=\$'\\e[1;38;5;208m'
 C_WARN=\$'\\e[1;38;5;167m'
 C_TEST=\$'\\e[1;38;5;142m'
+C_COUNT=\$'\\e[38;5;108m'
 "
 
 THEMES[dracula]="
@@ -77,6 +80,7 @@ C_EX=\$'\\e[38;5;239m'
 C_MATCH=\$'\\e[1;38;5;215m'
 C_WARN=\$'\\e[1;38;5;203m'
 C_TEST=\$'\\e[1;38;5;120m'
+C_COUNT=\$'\\e[38;5;117m'
 "
 
 CURRENT_THEME="default"
@@ -108,6 +112,7 @@ if [[ ! -t 1 ]]; then
     C_MATCH=""
     C_WARN=""
     C_TEST=""
+    C_COUNT=""
 fi
 
 ce() {
@@ -124,7 +129,7 @@ TARGET_DIR="."
 EXCLUDES=()
 CAT_EXTS=()
 GREP_PATTERN=""
-USE_GITIGNORE=false
+USE_GITIGNORE=true # NOW DEFAULT
 SHOW_STATS=false
 OUTPUT_MD=false
 OUTPUT_JSON=false
@@ -141,17 +146,40 @@ FINGERPRINT_MODE=false
 RESOLVE_SYMLINKS=false
 NO_CLIP=false
 CLIP=100
+SHOW_FILE_COUNT=false
+USE_TREEIGNORE=true
 
 DIR_COUNT=0
 FILE_COUNT=0
 declare -A LANG_STATS
 declare -A FILE_HASHES
-DUPLICATE_FILES=()
+declare -A DUPLICATE_GROUPS
+TOTAL_SIZE=0
+
+# Common patterns to ignore even without git
+COMMON_IGNORES=(
+    "node_modules"
+    ".git"
+    "dist"
+    "build"
+    "target"
+    ".next"
+    ".nuxt"
+    "out"
+    "coverage"
+    ".cache"
+    ".venv"
+    "venv"
+    "__pycache__"
+    "*.pyc"
+    ".DS_Store"
+    "Thumbs.db"
+)
 
 # ---------- Help ----------
 usage() {
     cat <<EOF
-${C_HEADER}Enhanced Tree — Ultimate Developer Tool${C_RESET}
+${C_HEADER}Enhanced Tree v2.0 — Ultimate Developer Tool${C_RESET}
 
 ${C_FLAG}USAGE${C_RESET}
   ./better-tree.sh [OPTIONS] [DIRECTORY]
@@ -168,6 +196,7 @@ ${C_FLAG}DISPLAY${C_RESET}
   ${C_FLAG}-s${C_RESET}                Hide file sizes
   ${C_FLAG}--theme${C_RESET} ${C_ARG}<name>${C_RESET}    Theme: default | nord | gruvbox | dracula
   ${C_FLAG}--tests${C_RESET}            Highlight test files
+  ${C_FLAG}--count${C_RESET}            Show file count per directory
 
 ${C_FLAG}INSPECT FILES${C_RESET}
   ${C_FLAG}-c${C_RESET}, ${C_FLAG}--cat${C_RESET} ${C_ARG}<ext...>${C_RESET}
@@ -179,15 +208,16 @@ ${C_FLAG}INSPECT FILES${C_RESET}
   ${C_FLAG}--no-clip${C_RESET}, ${C_FLAG}--nc${C_RESET}
                       Disable line clipping
 
-${C_FLAG}GIT & FILTERING${C_RESET}
-  ${C_FLAG}--git${C_RESET}              Respect .gitignore
+${C_FLAG}GIT & FILTERING (Git ignore is DEFAULT)${C_RESET}
+  ${C_FLAG}--no-git${C_RESET}           Disable .gitignore and show everything
+  ${C_FLAG}--no-treeignore${C_RESET}    Disable .treeignore file
   ${C_FLAG}--focus${C_RESET} ${C_ARG}<ext...>${C_RESET}
                       Show only directories containing these extensions
 
 ${C_FLAG}ANALYSIS${C_RESET}
   ${C_FLAG}--stats${C_RESET}            Show language statistics
   ${C_FLAG}--big${C_RESET}              Highlight files >5MB
-  ${C_FLAG}--dupes${C_RESET}            Find duplicate files
+  ${C_FLAG}--dupes${C_RESET}            Find duplicate files (by content hash)
   ${C_FLAG}--audit${C_RESET}            Security audit (permissions, secrets)
   ${C_FLAG}--fingerprint${C_RESET}      Project summary overview
 
@@ -197,17 +227,29 @@ ${C_FLAG}ORGANIZATION${C_RESET}
   ${C_FLAG}--resolve${C_RESET}          Resolve symlinks
 
 ${C_FLAG}OUTPUT FORMATS${C_RESET}
-  ${C_FLAG}--md${C_RESET}               Markdown export
+  ${C_FLAG}--md${C_RESET}               Markdown export (enhanced)
   ${C_FLAG}--json${C_RESET}             JSON output
-  ${C_FLAG}--prompt${C_RESET}           AI-friendly dump (no colors, includes code)
+  ${C_FLAG}--prompt${C_RESET}           AI-friendly dump (respects gitignore)
 
 ${C_FLAG}EXAMPLES${C_RESET}
+  ${C_EX}# Basic usage (gitignore enabled by default)${C_RESET}
   ./better-tree.sh
-  ./better-tree.sh -L 2 --git
-  ./better-tree.sh -g "TODO" -c go
-  ./better-tree.sh --stats --big
+  ./better-tree.sh -L 2
+  
+  ${C_EX}# Show everything including node_modules${C_RESET}
+  ./better-tree.sh --no-git
+  
+  ${C_EX}# Code inspection${C_RESET}
+  ./better-tree.sh -g "TODO" -c go tsx
+  
+  ${C_EX}# Analysis${C_RESET}
+  ./better-tree.sh --stats --big --dupes
+  
+  ${C_EX}# AI-ready export (respects gitignore)${C_RESET}
   ./better-tree.sh --prompt -c go tsx > prompt.txt
-  ./better-tree.sh --focus go tsx --theme nord
+  
+  ${C_EX}# Advanced${C_RESET}
+  ./better-tree.sh --focus go tsx --theme nord --count
 
 EOF
     exit 0
@@ -224,9 +266,25 @@ format_size() {
 
 is_excluded() {
     local n=$1
+
+    # Check user-provided excludes
     for e in "${EXCLUDES[@]}"; do
         [[ "$n" == $e ]] && return 0
     done
+
+    # Check common ignores if git is enabled
+    if $USE_GITIGNORE; then
+        for pattern in "${COMMON_IGNORES[@]}"; do
+            if [[ "$pattern" == *"*"* ]]; then
+                # Pattern with wildcard
+                [[ "$n" == $pattern ]] && return 0
+            else
+                # Exact match
+                [[ "$n" == "$pattern" ]] && return 0
+            fi
+        done
+    fi
+
     return 1
 }
 
@@ -271,12 +329,32 @@ is_git_ignored() {
     [[ ! $USE_GITIGNORE == true ]] && return 1
 
     # Check if we're in a git repo
-    if ! git rev-parse --git-dir &>/dev/null; then
-        return 1
+    if git rev-parse --git-dir &>/dev/null 2>&1; then
+        # Use git check-ignore
+        git check-ignore -q "$path" 2>/dev/null && return 0
     fi
 
-    # Use git check-ignore
-    git check-ignore -q "$path" 2>/dev/null && return 0
+    return 1
+}
+
+is_treeignore_ignored() {
+    local path=$1
+    [[ ! $USE_TREEIGNORE == true ]] && return 1
+    [[ ! -f ".treeignore" ]] && return 1
+
+    local basename_path
+    basename_path=$(basename "$path")
+
+    while IFS= read -r pattern; do
+        # Skip empty lines and comments
+        [[ -z "$pattern" || "$pattern" == \#* ]] && continue
+
+        # Check if path matches pattern
+        if [[ "$basename_path" == $pattern || "$path" == *"/$pattern"* || "$path" == *"/$pattern" ]]; then
+            return 0
+        fi
+    done <".treeignore"
+
     return 1
 }
 
@@ -298,6 +376,12 @@ has_focus_extension() {
     while IFS= read -r -d '' file; do
         local name
         name=$(basename "$file")
+
+        # Skip if ignored
+        is_git_ignored "$file" && continue
+        is_treeignore_ignored "$file" && continue
+        is_excluded "$(basename "$file")" && continue
+
         for ext in "${FOCUS_EXTS[@]}"; do
             if [[ "$name" == *."$ext" ]]; then
                 found=true
@@ -328,6 +412,54 @@ get_file_mtime() {
     fi
 }
 
+count_files_in_dir() {
+    local dir=$1
+    local count=0
+
+    while IFS= read -r -d '' file; do
+        is_git_ignored "$file" && continue
+        is_treeignore_ignored "$file" && continue
+        is_excluded "$(basename "$file")" && continue
+        ((count++))
+    done < <(find "$dir" -maxdepth 1 -type f -print0 2>/dev/null)
+
+    echo "$count"
+}
+
+# ---------- Track Language Stats ----------
+track_file() {
+    local file=$1
+    local ext
+    ext=$(get_extension "$(basename "$file")")
+
+    # Increment count for this extension
+    if [[ -n "${LANG_STATS[$ext]}" ]]; then
+        LANG_STATS[$ext]=$((LANG_STATS[$ext] + 1))
+    else
+        LANG_STATS[$ext]=1
+    fi
+
+    # Track size
+    local size
+    size=$(get_file_size "$file")
+    ((TOTAL_SIZE += size))
+
+    # Track duplicates if enabled
+    if $FIND_DUPES; then
+        local hash
+        hash=$(calculate_hash "$file")
+        if [[ "$hash" != "unknown" ]]; then
+            if [[ -n "${FILE_HASHES[$hash]}" ]]; then
+                # Duplicate found
+                DUPLICATE_GROUPS[$hash]+="$file"$'\n'
+            else
+                FILE_HASHES[$hash]="$file"
+                DUPLICATE_GROUPS[$hash]="$file"$'\n'
+            fi
+        fi
+    fi
+}
+
 # ---------- JSON Output ----------
 json_escape() {
     local s=$1
@@ -340,7 +472,7 @@ json_escape() {
 }
 
 print_json_tree() {
-    local dir=$1 depth=$2 is_last=$3
+    local dir=$1 depth=$2
 
     [[ $MAX_DEPTH -ge 0 && $depth -gt $MAX_DEPTH ]] && return
 
@@ -363,22 +495,20 @@ print_json_tree() {
     IFS=$'\n' items=($(sort <<<"${items[*]}"))
     unset IFS
 
-    local total=${#items[@]}
-    local idx=0
     local first=true
 
     for item in "${items[@]}"; do
         local item_name
         item_name=$(basename "$item")
+
         is_excluded "$item_name" && continue
         is_git_ignored "$item" && continue
-
-        ((idx++))
+        is_treeignore_ignored "$item" && continue
 
         if [[ -d "$item" ]]; then
             $first || echo -n ","
             first=false
-            print_json_tree "$item" $((depth + 1)) $((idx == total))
+            print_json_tree "$item" $((depth + 1))
         elif [[ -f "$item" ]]; then
             $first || echo -n ","
             first=false
@@ -396,7 +526,7 @@ print_json_tree() {
     echo -n "]}"
 }
 
-# ---------- Markdown Output ----------
+# ---------- Enhanced Markdown Output ----------
 print_md_tree() {
     local dir=$1 prefix=$2 depth=$3
 
@@ -412,14 +542,41 @@ print_md_tree() {
     for item in "${items[@]}"; do
         local name
         name=$(basename "$item")
+
         is_excluded "$name" && continue
         is_git_ignored "$item" && continue
+        is_treeignore_ignored "$item" && continue
 
         if [[ -d "$item" ]]; then
-            echo "${prefix}- **${name}/**"
+            echo "${prefix}- 📁 **${name}/**"
             print_md_tree "$item" "${prefix}  " $((depth + 1))
         elif [[ -f "$item" ]]; then
-            echo "${prefix}- ${name}"
+            local size
+            size=$(get_file_size "$item")
+            local ext
+            ext=$(get_extension "$name")
+
+            if [[ -x "$item" ]]; then
+                echo "${prefix}- ⚡ \`${name}\` _(executable, $(format_size $size))_"
+            else
+                case "$ext" in
+                go | py | js | ts | tsx | jsx | java | rs | c | cpp | h | hpp)
+                    echo "${prefix}- 💻 \`${name}\` _($(format_size $size))_"
+                    ;;
+                md | txt | rst)
+                    echo "${prefix}- 📝 \`${name}\` _($(format_size $size))_"
+                    ;;
+                json | yaml | yml | toml | xml)
+                    echo "${prefix}- ⚙️ \`${name}\` _($(format_size $size))_"
+                    ;;
+                png | jpg | jpeg | gif | svg | webp)
+                    echo "${prefix}- 🖼️ \`${name}\` _($(format_size $size))_"
+                    ;;
+                *)
+                    echo "${prefix}- 📄 \`${name}\` _($(format_size $size))_"
+                    ;;
+                esac
+            fi
         fi
     done
 }
@@ -469,6 +626,7 @@ print_tree() {
 
         is_excluded "$name" && continue
         is_git_ignored "$item" && continue
+        is_treeignore_ignored "$item" && continue
 
         if [[ ${#FOCUS_EXTS[@]} -gt 0 && -d "$item" ]]; then
             has_focus_extension "$item" || continue
@@ -494,9 +652,9 @@ print_tree() {
             print_tree "$item" "$next_prefix" $((depth + 1))
         else
             ((FILE_COUNT++))
+            track_file "$item"
         fi
     done
-
 }
 
 print_single_item() {
@@ -533,9 +691,18 @@ print_single_item() {
         fi
 
     elif [[ -d "$item" ]]; then
+        local count_str=""
+        if $SHOW_FILE_COUNT; then
+            local fcount
+            fcount=$(count_files_in_dir "$item")
+            count_str="${C_COUNT}[$fcount files] ${C_RESET}"
+        fi
+
         if $SHOW_TESTS && [[ "$name" == *test* || "$name" == *Test* ]]; then
+            echo -ne "$count_str"
             ce "$C_TEST" "$name/"
         else
+            echo -ne "$count_str"
             ce "$C_DIR" "$name/"
         fi
 
@@ -549,6 +716,7 @@ print_single_item() {
                 ce "$C_FILE" "$name"
             fi
         fi
+
         # ---- grep ----
         if [[ -n "$GREP_PATTERN" ]] && grep -q "$GREP_PATTERN" "$item" 2>/dev/null; then
             ce "$C_CONTENT" "${next_prefix}    ╭── matches ──"
@@ -574,9 +742,8 @@ print_single_item() {
         fi
 
         if $AUDIT_MODE; then
-            audit_file "$item"
+            audit_file "$item" "$next_prefix"
         fi
-
     fi
 }
 
@@ -593,8 +760,8 @@ print_stats() {
     # Sort by count
     for ext in "${!LANG_STATS[@]}"; do
         echo "${LANG_STATS[$ext]} $ext"
-    done | sort -rn | while read count ext; do
-        ce "$C_META" "  $ext: ${C_FILE}$count files${C_RESET}"
+    done | sort -rn | while read -r count ext; do
+        ce "$C_META" "  .$ext: ${C_FILE}$count files${C_RESET}"
     done
 }
 
@@ -602,52 +769,55 @@ print_stats() {
 print_fingerprint() {
     ce "$C_HEADER" "=== Project Fingerprint ==="
     echo
-    ce "$C_META" "Directory: ${C_FILE}$TARGET_DIR${C_RESET}"
-    ce "$C_META" "Total Directories: ${C_FILE}$DIR_COUNT${C_RESET}"
-    ce "$C_META" "Total Files: ${C_FILE}$FILE_COUNT${C_RESET}"
-
-    # Calculate total size
-    local total_size=0
-    while IFS= read -r -d '' file; do
-        local fsize
-        fsize=$(get_file_size "$file")
-        ((total_size += fsize))
-    done < <(find "$TARGET_DIR" -type f -print0 2>/dev/null)
-    ce "$C_META" "Total Size: ${C_FILE}$(format_size $total_size)${C_RESET}"
+    ce "$C_META" "📂 Directory: ${C_FILE}$TARGET_DIR${C_RESET}"
+    ce "$C_META" "📁 Total Directories: ${C_FILE}$DIR_COUNT${C_RESET}"
+    ce "$C_META" "📄 Total Files: ${C_FILE}$FILE_COUNT${C_RESET}"
+    ce "$C_META" "💾 Total Size: ${C_FILE}$(format_size $TOTAL_SIZE)${C_RESET}"
 
     # Max depth
     local max_depth_found=0
     while IFS= read -r dir; do
+        is_git_ignored "$dir" && continue
+        is_treeignore_ignored "$dir" && continue
+
         local depth
         depth=$(echo "$dir" | tr -cd '/' | wc -c)
         ((depth > max_depth_found)) && max_depth_found=$depth
     done < <(find "$TARGET_DIR" -type d 2>/dev/null)
-    ce "$C_META" "Max Depth: ${C_FILE}$max_depth_found${C_RESET}"
+    ce "$C_META" "📊 Max Depth: ${C_FILE}$max_depth_found${C_RESET}"
 
     echo
     print_stats
 
     # Git status
-    if git rev-parse --git-dir &>/dev/null; then
+    if git rev-parse --git-dir &>/dev/null 2>&1; then
         echo
         ce "$C_HEADER" "=== Git Status ==="
         local branch
         branch=$(git branch --show-current 2>/dev/null)
-        ce "$C_META" "Branch: ${C_FILE}$branch${C_RESET}"
+        ce "$C_META" "🌿 Branch: ${C_FILE}$branch${C_RESET}"
 
         local commits
         commits=$(git rev-list --count HEAD 2>/dev/null)
-        ce "$C_META" "Commits: ${C_FILE}$commits${C_RESET}"
+        ce "$C_META" "📝 Commits: ${C_FILE}$commits${C_RESET}"
+
+        # Check for uncommitted changes
+        if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+            ce "$C_WARN" "⚠️  Uncommitted changes detected"
+        fi
     fi
 
     # Largest files
     echo
     ce "$C_HEADER" "=== Largest Files (Top 10) ==="
     find "$TARGET_DIR" -type f -print0 2>/dev/null | while IFS= read -r -d '' file; do
+        is_git_ignored "$file" && continue
+        is_treeignore_ignored "$file" && continue
+
         local size
         size=$(get_file_size "$file")
         echo "$size $file"
-    done | sort -rn | head -10 | while read size file; do
+    done | sort -rn | head -10 | while read -r size file; do
         local rel_path
         rel_path=${file#$TARGET_DIR/}
         ce "$C_SIZE" "  $(format_size $size) ${C_FILE}$rel_path${C_RESET}"
@@ -659,6 +829,9 @@ print_grouped_view() {
     declare -A grouped
 
     while IFS= read -r -d '' file; do
+        is_git_ignored "$file" && continue
+        is_treeignore_ignored "$file" && continue
+
         local name
         local ext
         name=$(basename "$file")
@@ -670,7 +843,13 @@ print_grouped_view() {
     echo
 
     for ext in "${!grouped[@]}"; do
-        ce "$C_HEADER" "[$ext]"
+        local count=0
+        while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            ((count++))
+        done <<<"${grouped[$ext]}"
+
+        ce "$C_HEADER" "[$ext] ($count files)"
         while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             ce "$C_FILE" "  $(realpath --relative-to="$dir" "$file" 2>/dev/null || echo "$file")"
@@ -681,57 +860,150 @@ print_grouped_view() {
 
 audit_file() {
     local file=$1
-    local perm
-    perm=$(stat -c "%A" "$file" 2>/dev/null || stat -f "%Sp" "$file")
+    local prefix=$2
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        perm=$(stat -f "%Sp" "$file" 2>/dev/null)
+    else
+        perm=$(stat -c "%A" "$file" 2>/dev/null)
+    fi
 
     # World writable
-    if [[ "$perm" == *w*w* ]]; then
-        ce "$C_WARN" "  ⚠ World-writable: $file"
+    if [[ "$perm" == *"w"* ]] && [[ "$perm" =~ ......w ]]; then
+        ce "$C_WARN" "${prefix}    ⚠️  World-writable: $(basename "$file")"
     fi
 
     # Executable in weird places
-    if [[ -x "$file" && "$file" != *.sh && "$file" != *.go && "$file" != *.ts ]]; then
-        ce "$C_WARN" "  ⚠ Suspicious executable: $file"
+    if [[ -x "$file" ]]; then
+        local ext="${file##*.}"
+        case "$ext" in
+        sh | bash | py | rb | pl | js | ts | go | rs)
+            # Expected executable extensions
+            ;;
+        *)
+            ce "$C_WARN" "${prefix}    ⚠️  Suspicious executable: $(basename "$file")"
+            ;;
+        esac
     fi
 
     # Secrets
-    if grep -qiE "password|secret|token|apikey" "$file" 2>/dev/null; then
-        ce "$C_WARN" "  ⚠ Possible secret in: $file"
+    if grep -qiE "password|secret|api[_-]?key|token|private[_-]?key" "$file" 2>/dev/null; then
+        ce "$C_WARN" "${prefix}    ⚠️  Possible secret in: $(basename "$file")"
     fi
 }
 
+# ---------- FIXED: Prompt Generation (Respects gitignore) ----------
 generate_prompt_dump() {
     local dir=$1
 
     {
         echo "# Project Structure"
+        echo ""
+        echo "Generated on: $(date)"
+        echo ""
+
+        # Print tree structure
         echo '```'
+        # Temporarily capture tree output
         print_tree "$dir" "" 0
         echo '```'
-        echo
+        echo ""
 
-        echo "# Source Files"
-        echo
+        # Metadata
+        echo "## Project Metadata"
+        echo ""
+        echo "- **Total Directories**: $DIR_COUNT"
+        echo "- **Total Files**: $FILE_COUNT"
+        echo "- **Total Size**: $(format_size $TOTAL_SIZE)"
+        echo ""
 
+        # Language stats
+        if [[ ${#LANG_STATS[@]} -gt 0 ]]; then
+            echo "## Language Breakdown"
+            echo ""
+            for ext in "${!LANG_STATS[@]}"; do
+                echo "${LANG_STATS[$ext]} $ext"
+            done | sort -rn | while read -r count ext; do
+                echo "- .$ext: $count files"
+            done
+            echo ""
+        fi
+
+        echo "## Source Files"
+        echo ""
+
+        # Walk through files respecting all ignore rules
         while IFS= read -r -d '' file; do
+            # Skip ignored files
+            is_git_ignored "$file" && continue
+            is_treeignore_ignored "$file" && continue
+            is_excluded "$(basename "$file")" && continue
+
             ext="${file##*.}"
+            # Only include source files
             case "$ext" in
-            go | ts | tsx | js | jsx | py | json | md | yaml | yml | sh | java | dart | kt | kts)
-                echo "## File: ${file#$dir/}"
+            go | ts | tsx | js | jsx | py | rb | php | java | c | cpp | h | hpp | cs | rs | dart | kt | kts | swift | json | yaml | yml | toml | md | sh | bash | sql)
+                local rel_path="${file#$dir/}"
+                echo "### 📄 \`$rel_path\`"
+                echo ""
                 echo '```'"$ext"
                 sed 's/\t/    /g' "$file"
                 echo '```'
-                echo
+                echo ""
                 ;;
             esac
-        done < <(find "$dir" -type f -print0)
+        done < <(find "$dir" -type f -print0 2>/dev/null)
     } | tee /tmp/tree_prompt.txt
 
-    # Copy to clipboard
-    if command -v xclip &>/dev/null; then
+    # Try to copy to clipboard
+    if command -v pbcopy &>/dev/null; then
+        pbcopy </tmp/tree_prompt.txt
+        echo
+        ce "$C_HEADER" "✅ Prompt copied to clipboard (macOS)"
+    elif command -v xclip &>/dev/null; then
         xclip -sel clipboard </tmp/tree_prompt.txt
         echo
-        ce "$C_HEADER" "Prompt copied to clipboard ✓"
+        ce "$C_HEADER" "✅ Prompt copied to clipboard (Linux)"
+    elif command -v clip &>/dev/null; then
+        clip </tmp/tree_prompt.txt
+        echo
+        ce "$C_HEADER" "✅ Prompt copied to clipboard (Windows)"
+    else
+        echo
+        ce "$C_HEADER" "💾 Prompt saved to /tmp/tree_prompt.txt"
+    fi
+}
+
+# ---------- Duplicate Detection ----------
+print_duplicates() {
+    local has_dupes=false
+
+    echo
+    ce "$C_HEADER" "=== Duplicate Files (by content) ==="
+    echo
+
+    for hash in "${!DUPLICATE_GROUPS[@]}"; do
+        local count=0
+        while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            ((count++))
+        done <<<"${DUPLICATE_GROUPS[$hash]}"
+
+        if ((count > 1)); then
+            has_dupes=true
+            ce "$C_WARN" "Hash: $hash ($count files)"
+            while IFS= read -r file; do
+                [[ -z "$file" ]] && continue
+                local rel_path="${file#$TARGET_DIR/}"
+                local size=$(get_file_size "$file")
+                ce "$C_FILE" "  - $rel_path ($(format_size $size))"
+            done <<<"${DUPLICATE_GROUPS[$hash]}"
+            echo
+        fi
+    done
+
+    if ! $has_dupes; then
+        ce "$C_META" "No duplicate files found."
     fi
 }
 
@@ -773,8 +1045,12 @@ while [[ $# -gt 0 ]]; do
         GREP_PATTERN="$2"
         shift 2
         ;;
-    --git)
-        USE_GITIGNORE=true
+    --no-git)
+        USE_GITIGNORE=false
+        shift
+        ;;
+    --no-treeignore)
+        USE_TREEIGNORE=false
         shift
         ;;
     --stats)
@@ -815,6 +1091,7 @@ while [[ $# -gt 0 ]]; do
         C_MATCH=""
         C_WARN=""
         C_TEST=""
+        C_COUNT=""
         shift
         ;;
     --big)
@@ -861,6 +1138,10 @@ while [[ $# -gt 0 ]]; do
         load_theme "$CURRENT_THEME"
         shift 2
         ;;
+    --count)
+        SHOW_FILE_COUNT=true
+        shift
+        ;;
     -h | --help)
         usage
         ;;
@@ -885,19 +1166,34 @@ done
     exit 1
 }
 
+# Change to target directory for git operations
+cd "$TARGET_DIR" || exit 1
+
 # ---------- Run ----------
 if $PROMPT_MODE; then
+    # First collect stats
+    print_tree "$TARGET_DIR" "" 0 >/dev/null 2>&1
     generate_prompt_dump "$TARGET_DIR"
     exit 0
 elif $OUTPUT_JSON; then
     echo "{"
     echo "\"root\":"
-    print_json_tree "$TARGET_DIR" 0 true
+    print_json_tree "$TARGET_DIR" 0
     echo "}"
 elif $OUTPUT_MD; then
-    echo "# Directory Structure: $TARGET_DIR"
-    echo
+    echo "# 📂 Directory Structure"
+    echo ""
+    echo "**Path:** \`$TARGET_DIR\`"
+    echo ""
+    echo "**Generated:** $(date)"
+    echo ""
+    echo "---"
+    echo ""
     print_md_tree "$TARGET_DIR" "" 0
+    echo ""
+    echo "---"
+    echo ""
+    echo "_Generated by Enhanced Tree v2.0_"
 elif $FINGERPRINT_MODE; then
     # First collect the data
     if $GROUP_BY_EXT; then
@@ -907,6 +1203,10 @@ elif $FINGERPRINT_MODE; then
 
     print_tree "$TARGET_DIR" "" 0 >/dev/null
     print_fingerprint
+
+    if $FIND_DUPES; then
+        print_duplicates
+    fi
 else
     # Normal tree output
     ce "$C_DIR" "$TARGET_DIR/"
@@ -919,20 +1219,16 @@ else
     echo
 
     if $DIR_ONLY; then
-        ce "$C_META" "$DIR_COUNT directories"
+        ce "$C_META" "📁 $DIR_COUNT directories"
     else
-        ce "$C_META" "$DIR_COUNT directories, $FILE_COUNT files"
+        ce "$C_META" "📁 $DIR_COUNT directories, 📄 $FILE_COUNT files"
     fi
 
     if $SHOW_STATS; then
         print_stats
     fi
 
-    if $FIND_DUPES && [[ ${#DUPLICATE_FILES[@]} -gt 0 ]]; then
-        echo
-        ce "$C_HEADER" "=== Duplicate Files ==="
-        for dup in "${DUPLICATE_FILES[@]}"; do
-            ce "$C_WARN" "  $dup"
-        done
+    if $FIND_DUPES; then
+        print_duplicates
     fi
 fi

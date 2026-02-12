@@ -62,7 +62,7 @@ etree
 ```bash
 ./better-tree.sh
 ./better-tree.sh -L 2
-./better-tree.sh --git
+./better-tree.sh
 ```
 
 ### Code Inspection
@@ -78,7 +78,7 @@ etree
 ```bash
 ./better-tree.sh --stats
 ./better-tree.sh --fingerprint
-./better-tree.sh --big --git
+./better-tree.sh --big
 ./better-tree.sh --dupes
 ./better-tree.sh --audit
 ```
@@ -173,7 +173,7 @@ Paste into ChatGPT/Claude for instant code review.
 ## Understand a New Codebase
 
 ```bash
-./better-tree.sh --fingerprint --git
+./better-tree.sh --fingerprint
 ./better-tree.sh -L 2 --focus go tsx
 ```
 
@@ -182,8 +182,8 @@ Paste into ChatGPT/Claude for instant code review.
 ## Pre-Commit Checklist
 
 ```bash
-./better-tree.sh --big --git
-./better-tree.sh -g "TODO|FIXME" --git
+./better-tree.sh --big
+./better-tree.sh -g "TODO|FIXME"
 ./better-tree.sh --audit -g "password|secret"
 ```
 
@@ -235,7 +235,6 @@ Max Depth: 5
 - Bash 5+
 - macOS or Linux
 - Optional:
-  - `git` (for `--git`)
   - `md5sum` or `md5`
   - `jq` (for JSON piping)
   - `xclip`
