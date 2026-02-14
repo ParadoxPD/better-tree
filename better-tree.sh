@@ -119,6 +119,269 @@ ce() {
     printf "%s%s%s\n" "$1" "$2" "$C_RESET"
 }
 
+# ---------- Icons ----------
+SHOW_ICONS=true
+
+# File type icons (Nerd Font v3 compatible)
+declare -A FILE_ICONS
+FILE_ICONS=(
+    # Programming Languages
+    [py]=""    # Python
+    [js]=""    # JavaScript
+    [ts]=""    # TypeScript
+    [tsx]=""   # React TS
+    [jsx]=""   # React JS
+    [go]=""    # Go
+    [rs]=""    # Rust
+    [rb]=""    # Ruby
+    [php]=""   # PHP
+    [java]=""  # Java
+    [c]=""     # C
+    [cpp]=""   # C++
+    [h]=""     # C Header
+    [hpp]=""   # C++ Header
+    [cs]="󰌛"    # C#
+    [swift]="" # Swift
+    [kt]=""    # Kotlin
+    [kts]=""   # Kotlin Script
+    [dart]=""  # Dart
+    [lua]=""   # Lua
+    [vim]=""   # Vim
+    [sh]=""    # Shell
+    [bash]=""  # Bash
+    [zsh]=""   # Zsh
+    [fish]=""  # Fish
+    [r]=""     # R
+    [jl]=""    # Julia
+    [scala]="" # Scala
+    [clj]=""   # Clojure
+    [cljs]=""  # ClojureScript
+    [ex]=""    # Elixir
+    [exs]=""   # Elixir Script
+    [erl]=""   # Erlang
+    [hs]=""    # Haskell
+    [ml]=""    # OCaml
+    [nim]=""   # Nim
+    [zig]=""   # Zig
+    [nix]=""   # Nix
+    [pl]=""    # Perl
+
+    # Web
+    [html]=""
+    [htm]=""
+    [css]=""
+    [scss]=""
+    [sass]=""
+    [less]=""
+    [vue]=""
+    [svelte]=""
+    [astro]=""
+    [graphql]=""
+    [gql]=""
+    [wasm]=""
+
+    # Data/Config
+    [json]=""
+    [yaml]=""
+    [yml]=""
+    [toml]=""
+    [xml]="󰗀"
+    [ini]=""
+    [conf]=""
+    [config]=""
+    [properties]=""
+    [csv]=""
+    [tf]=""  # Terraform
+    [k8s]="󱃾" # Kubernetes
+
+    # Documents
+    [md]=""
+    [markdown]=""
+    [txt]="󰈙"
+    [pdf]=""
+    [doc]="󰈬"
+    [docx]="󰈬"
+    [xls]="󰈛"
+    [xlsx]="󰈛"
+    [ppt]="󰈧"
+    [pptx]="󰈧"
+    [rtf]="󰈙"
+    [tex]=""
+    [org]=""
+    [rst]=""
+    [log]="󰌱"
+
+    # Images
+    [png]="󰸭"
+    [jpg]="󰸭"
+    [jpeg]="󰸭"
+    [gif]="󰸭"
+    [svg]="󰜡"
+    [ico]="󰸭"
+    [webp]="󰸭"
+    [bmp]="󰸭"
+    [tiff]="󰸭"
+    [psd]=""
+    [ai]=""
+    [sketch]=""
+    [fig]=""
+
+    # Video/Audio
+    [mp4]="󰈫"
+    [avi]="󰈫"
+    [mkv]="󰈫"
+    [mov]="󰈫"
+    [webm]="󰈫"
+    [mp3]="󰈣"
+    [wav]="󰈣"
+    [flac]="󰈣"
+    [ogg]="󰈣"
+    [m4a]="󰈣"
+    [aac]="󰈣"
+
+    # Archives
+    [zip]=""
+    [tar]=""
+    [gz]=""
+    [rar]=""
+    [7z]=""
+    [bz2]=""
+    [xz]=""
+    [tgz]=""
+    [deb]=""
+    [rpm]=""
+    [pkg]="󰏗"
+    [dmg]=""
+    [iso]="󰗮"
+    [jar]=""
+
+    # Build/Package/Manager
+    [lock]=""
+    [gradle]=""
+    [maven]=""
+    [cmake]=""
+    [make]=""
+    [makefile]=""
+    [npm]=""
+    [yarn]=""
+    [pnpm]=""
+
+    # Version Control
+    [git]=""
+    [gitignore]=""
+    [gitmodules]=""
+    [gitattributes]=""
+    [gitconfig]=""
+
+    # Special Files
+    [dockerfile]=""
+    [dockerignore]=""
+    [compose]=""
+    [license]=""
+    [readme]=""
+    [changelog]=""
+    [contributing]=""
+    [authors]=""
+    [todo]=""
+    [robot]="󰚩" # robots.txt
+
+    # Database
+    [sql]=""
+    [db]=""
+    [sqlite]=""
+    [sqlite3]=""
+    [mdb]=""
+    [pgsql]=""
+
+    # Fonts
+    [ttf]=""
+    [otf]=""
+    [woff]=""
+    [woff2]=""
+    [eot]=""
+
+    # Misc
+    [env]=""
+    [envrc]=""
+    [editorconfig]=""
+    [eslintrc]=""
+    [prettierrc]=""
+    [babelrc]=""
+    [webpack]="󰜫"
+    [tsconfig]=""
+    [package]="" # npm package
+    [cargo]=""   # rust cargo
+    [gemfile]="" # ruby gem
+    [procfile]=""
+    [gruntfile]=""
+    [gulpfile]=""
+    [rakefile]=""
+    [vagrantfile]=""
+    [cmakelists]=""
+    [requirements]=""
+    [pipfile]=""
+    [poetry]=""
+)
+
+# Fallback icons
+ICON_DIR=""
+ICON_FILE=""
+ICON_EXEC=""
+ICON_LINK=""
+
+get_file_icon() {
+    local name=$1
+    local ext="${name##*.}"
+    local name_lower="${name,,}"
+
+    # 1. Exact Filename Match (High Priority)
+    case "$name_lower" in
+    dockerfile | docker-compose.yml | docker-compose.yaml) echo "${FILE_ICONS[dockerfile]}" && return ;;
+    makefile | gnumakefile) echo "${FILE_ICONS[makefile]}" && return ;;
+    cmakelists.txt) echo "${FILE_ICONS[cmakelists]}" && return ;;
+    vagrantfile) echo "${FILE_ICONS[vagrantfile]}" && return ;;
+    rakefile) echo "${FILE_ICONS[rakefile]}" && return ;;
+    gemfile) echo "${FILE_ICONS[gemfile]}" && return ;;
+    procfile) echo "${FILE_ICONS[procfile]}" && return ;;
+    license | license.* | licence | licence.* | copying) echo "${FILE_ICONS[license]}" && return ;;
+    readme | readme.*) echo "${FILE_ICONS[readme]}" && return ;;
+    changelog | changelog.*) echo "${FILE_ICONS[changelog]}" && return ;;
+    robots.txt) echo "${FILE_ICONS[robot]}" && return ;;
+    esac
+
+    # 2. Dotfile Pattern Match
+    case "$name_lower" in
+    .gitattributes | .gitmodules | .gitignore | .gitconfig) echo "${FILE_ICONS[git]}" && return ;;
+    .dockerignore) echo "${FILE_ICONS[dockerignore]}" && return ;;
+    .npmrc | package.json | package-lock.json) echo "${FILE_ICONS[npm]}" && return ;;
+    yarn.lock) echo "${FILE_ICONS[yarn]}" && return ;;
+    pnpm-lock.yaml) echo "${FILE_ICONS[pnpm]}" && return ;;
+    cargo.toml | cargo.lock) echo "${FILE_ICONS[cargo]}" && return ;;
+    go.mod | go.sum) echo "${FILE_ICONS[go]}" && return ;;
+    requirements.txt | pipfile | pipfile.lock) echo "${FILE_ICONS[requirements]}" && return ;;
+    pyproject.toml | poetry.lock) echo "${FILE_ICONS[poetry]}" && return ;;
+    tsconfig.json | tsconfig.*.json) echo "${FILE_ICONS[tsconfig]}" && return ;;
+    webpack.*) echo "${FILE_ICONS[webpack]}" && return ;;
+    .env | .env.*) echo "${FILE_ICONS[env]}" && return ;;
+    .eslintrc*) echo "${FILE_ICONS[eslintrc]}" && return ;;
+    .editorconfig) echo "${FILE_ICONS[editorconfig]}" && return ;;
+    esac
+
+    # 3. Extension Match
+    if [[ -v "FILE_ICONS[$ext]" ]]; then
+        echo "${FILE_ICONS[$ext]}"
+    else
+        # 4. Fallback based on file type (basic checks)
+        if [[ -x "$name" && ! -d "$name" ]]; then
+            echo "$ICON_EXEC"
+        elif [[ -L "$name" ]]; then
+            echo "$ICON_LINK"
+        else
+            echo "$ICON_FILE"
+        fi
+    fi
+}
+
 # ---------- Defaults ----------
 MAX_DEPTH=-1
 SHOW_HIDDEN=false
@@ -194,6 +457,7 @@ ${C_FLAG}NAVIGATION${C_RESET}
 ${C_FLAG}DISPLAY${C_RESET}
   ${C_FLAG}-i${C_RESET}                Show detailed metadata (ls-like)
   ${C_FLAG}-s${C_RESET}                Hide file sizes
+  ${C_FLAG}--no-icon${C_RESET}         Disable file/folder icons
   ${C_FLAG}--theme${C_RESET} ${C_ARG}<name>${C_RESET}    Theme: default | nord | gruvbox | dracula
   ${C_FLAG}--tests${C_RESET}            Highlight test files
   ${C_FLAG}--count${C_RESET}            Show file count per directory
@@ -269,7 +533,7 @@ is_excluded() {
 
     # Check user-provided excludes
     for e in "${EXCLUDES[@]}"; do
-        [[ "$n" == $e ]] && return 0
+        [[ "$n" == "$e" ]] && return 0
     done
 
     # Check common ignores if git is enabled
@@ -277,7 +541,7 @@ is_excluded() {
         for pattern in "${COMMON_IGNORES[@]}"; do
             if [[ "$pattern" == *"*"* ]]; then
                 # Pattern with wildcard
-                [[ "$n" == $pattern ]] && return 0
+                [[ "$n" == "$pattern" ]] && return 0
             else
                 # Exact match
                 [[ "$n" == "$pattern" ]] && return 0
@@ -350,7 +614,7 @@ is_treeignore_ignored() {
         [[ -z "$pattern" || "$pattern" == \#* ]] && continue
 
         # Check if path matches pattern
-        if [[ "$basename_path" == $pattern || "$path" == *"/$pattern"* || "$path" == *"/$pattern" ]]; then
+        if [[ "$basename_path" == "$pattern" || "$path" == *"/$pattern"* || "$path" == *"/$pattern" ]]; then
             return 0
         fi
     done <".treeignore"
@@ -667,6 +931,7 @@ print_single_item() {
 
     local info=""
     local size=0
+    local icon=""
 
     if $SHOW_INFO; then
         info+="${C_META}[$(get_info "$item")] ${C_RESET}"
@@ -684,13 +949,16 @@ print_single_item() {
     echo -ne "${prefix}${C_META}${branch}${C_RESET}${info}"
 
     if [[ -L "$item" ]]; then
+        $SHOW_ICONS && icon="${ICON_LINK} "
         if $RESOLVE_SYMLINKS; then
-            ce "$C_LINK" "$name -> $(realpath "$item")"
+            ce "$C_LINK" "${icon}$name -> $(realpath "$item")"
         else
-            ce "$C_LINK" "$name -> $(readlink "$item")"
+            ce "$C_LINK" "${icon}$name -> $(readlink "$item")"
         fi
 
     elif [[ -d "$item" ]]; then
+        $SHOW_ICONS && icon="${ICON_DIR} "
+
         local count_str=""
         if $SHOW_FILE_COUNT; then
             local fcount
@@ -700,20 +968,28 @@ print_single_item() {
 
         if $SHOW_TESTS && [[ "$name" == *test* || "$name" == *Test* ]]; then
             echo -ne "$count_str"
-            ce "$C_TEST" "$name/"
+            ce "$C_TEST" "${icon}$name/"
         else
             echo -ne "$count_str"
-            ce "$C_DIR" "$name/"
+            ce "$C_DIR" "${icon}$name/"
         fi
 
     elif [[ -f "$item" ]]; then
+        if $SHOW_ICONS; then
+            if [[ -x "$item" ]]; then
+                icon="${ICON_EXEC} "
+            else
+                icon="$(get_file_icon "$name") "
+            fi
+        fi
+
         if $SHOW_TESTS && is_test_file "$name"; then
-            ce "$C_TEST" "$name"
+            ce "$C_TEST" "${icon}$name"
         else
             if [[ -x "$item" ]]; then
-                ce "$C_EXEC" "$name*"
+                ce "$C_EXEC" "${icon}$name*"
             else
-                ce "$C_FILE" "$name"
+                ce "$C_FILE" "${icon}$name"
             fi
         fi
 
@@ -1051,6 +1327,10 @@ while [[ $# -gt 0 ]]; do
         ;;
     --no-treeignore)
         USE_TREEIGNORE=false
+        shift
+        ;;
+    --no-icon)
+        SHOW_ICONS=false
         shift
         ;;
     --stats)
